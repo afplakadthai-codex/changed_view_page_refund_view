@@ -88,7 +88,7 @@ $currency = (string)($refund['currency'] ?? 'USD');
 $csrf = bvsrv_csrf_token();
 $dashboardUrl = bvsrv_seller_refund_dashboard_url();
 
-$headerRequestedAmount = bvsrv_pick_money([
+$sellerRequestedAmount = bvsrv_pick_money([
     $decision,
     $refund,
 ], [
@@ -96,7 +96,7 @@ $headerRequestedAmount = bvsrv_pick_money([
     'requested_amount',
 ], $requested);
 
-$headerApprovedAmount = bvsrv_pick_money([
+$sellerApprovedAmount = bvsrv_pick_money([
     $decision,
     $refund,
 ], [
@@ -104,7 +104,7 @@ $headerApprovedAmount = bvsrv_pick_money([
     'approved_amount',
 ], $approved);
 
-$headerFeeLossAmount = bvsrv_pick_money([
+$sellerFeeLossAmount = bvsrv_pick_money([
     $decision,
     $refund,
 ], [
@@ -118,13 +118,27 @@ $headerFeeLossAmount = bvsrv_pick_money([
     $refund,
 ], ['gateway_fee_loss'], 0.0));
 
-$headerActualRefundAmount = bvsrv_pick_money([
+$sellerNetRefundAmount = bvsrv_pick_money([
     $decision,
+], [
+    'actual_refund_amount',
+    'actual_refunded_amount',
+    'net_refund_amount',
+], $sellerApprovedAmount);
+
+$orderLevelRefundAmount = bvsrv_pick_money([
     $refund,
 ], [
     'actual_refund_amount',
     'actual_refunded_amount',
-], $headerApprovedAmount);
+    'refund_amount',
+    'total_refund_amount',
+], 0.0);
+$hasOrderLevelRefundAmount =
+    (array_key_exists('actual_refund_amount', $refund) && $refund['actual_refund_amount'] !== null && is_numeric($refund['actual_refund_amount'])) ||
+    (array_key_exists('actual_refunded_amount', $refund) && $refund['actual_refunded_amount'] !== null && is_numeric($refund['actual_refunded_amount'])) ||
+    (array_key_exists('refund_amount', $refund) && $refund['refund_amount'] !== null && is_numeric($refund['refund_amount'])) ||
+    (array_key_exists('total_refund_amount', $refund) && $refund['total_refund_amount'] !== null && is_numeric($refund['total_refund_amount']));
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -146,10 +160,13 @@ $headerActualRefundAmount = bvsrv_pick_money([
         .btn-secondary{background:#fff;color:#1f2937;border-color:#d1d5db}
         .btn-approve{background:var(--approve);color:#fff}
         .btn-reject{background:var(--reject);color:#fff}
-        .summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+        .summary-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+        .summary-section-title{margin:0 0 8px 0;font-size:.95rem;color:#374151;text-transform:uppercase;letter-spacing:.03em}
+        .summary-grid{display:grid;grid-template-columns:1fr;gap:12px}
         .summary-item{border:1px solid #eef2f7;background:#fbfcff;border-radius:11px;padding:12px}
         .summary-label{font-size:.79rem;color:var(--muted);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
         .summary-value{font-size:1.04rem;font-weight:700;color:#111827}
+        .explain-note{margin-top:12px;padding:10px 12px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569;font-size:.9rem}
         h3{margin:0 0 12px 0;font-size:1.15rem}
         .table-wrap{overflow:auto;border:1px solid #edf1f5;border-radius:12px}
         table{width:100%;border-collapse:separate;border-spacing:0;min-width:760px;background:#fff}
@@ -166,7 +183,7 @@ $headerActualRefundAmount = bvsrv_pick_money([
         @media (max-width:720px){
             body{padding:14px}
             .card{padding:14px}
-            .summary-grid{grid-template-columns:1fr}
+            .summary-sections{grid-template-columns:1fr}
             .page-title{font-size:1.3rem}
         }
     </style>
@@ -182,32 +199,50 @@ $headerActualRefundAmount = bvsrv_pick_money([
             <a class="btn btn-primary" href="<?php echo bvsrv_h($dashboardUrl); ?>">Back to Refund Dashboard</a>
         </div>
 
-        <div class="summary-grid">
-            <div class="summary-item">
-                <div class="summary-label">Header status</div>
-                <div class="summary-value"><span class="pill"><?php echo bvsrv_h((string)($refund['status'] ?? '')); ?></span></div>
+        <div class="summary-sections">
+            <div>
+                <h2 class="summary-section-title">Seller Slice Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="summary-label">Seller Requested Amount</div>
+                        <div class="summary-value money"><?php echo bvsrv_h(number_format($sellerRequestedAmount, 2) . ' ' . $currency); ?></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Seller Approved Amount</div>
+                        <div class="summary-value money"><?php echo bvsrv_h(number_format($sellerApprovedAmount, 2) . ' ' . $currency); ?></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Seller Fee Loss</div>
+                        <div class="summary-value money"><?php echo bvsrv_h(number_format($sellerFeeLossAmount, 2) . ' ' . $currency); ?></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Seller Net Refund</div>
+                        <div class="summary-value money"><?php echo bvsrv_h(number_format($sellerNetRefundAmount, 2) . ' ' . $currency); ?></div>
+                    </div>
+                </div>
             </div>
-            <div class="summary-item">
-                <div class="summary-label">Seller decision status</div>
-                <div class="summary-value"><span class="pill"><?php echo bvsrv_h($status); ?></span></div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">Requested Amount</div>
-                <div class="summary-value money"><?php echo bvsrv_h(number_format($headerRequestedAmount, 2) . ' ' . $currency); ?></div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">Approved Amount</div>
-                <div class="summary-value money"><?php echo bvsrv_h(number_format($headerApprovedAmount, 2) . ' ' . $currency); ?></div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">Fee Deducted / Non-refundable Fee</div>
-                <div class="summary-value money"><?php echo bvsrv_h(number_format($headerFeeLossAmount, 2) . ' ' . $currency); ?></div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">Actual Refund Amount</div>
-                <div class="summary-value money"><?php echo bvsrv_h(number_format($headerActualRefundAmount, 2) . ' ' . $currency); ?></div>
+            <div>
+                <h2 class="summary-section-title">Refund Context / Header</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="summary-label">Header Status</div>
+                        <div class="summary-value"><span class="pill"><?php echo bvsrv_h((string)($refund['status'] ?? '')); ?></span></div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Seller Decision Status</div>
+                        <div class="summary-value"><span class="pill"><?php echo bvsrv_h($status); ?></span></div>
+                    </div>
+                    <?php if ($hasOrderLevelRefundAmount): ?>
+                    <div class="summary-item">
+                        <div class="summary-label">Total Refund to Buyer (Order Level)</div>
+                        <div class="summary-value money"><?php echo bvsrv_h(number_format($orderLevelRefundAmount, 2) . ' ' . $currency); ?></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
+
+        <div class="explain-note">This page shows only your seller slice. Order-level totals may include other sellers’ items.</div>
     </div>
 
     <div class="card">
@@ -221,7 +256,7 @@ $headerActualRefundAmount = bvsrv_pick_money([
                     <th>Requested</th>
                     <th>Approved</th>
                     <th>Fee Loss</th>
-                    <th>Actual / Net Refund</th>
+                    <th>Seller Net Refund</th>
                 </tr>
                 </thead>
                 <tbody>
